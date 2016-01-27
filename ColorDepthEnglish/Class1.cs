@@ -210,7 +210,7 @@ namespace Microsoft.Samples.Kinect.InfraredBasics
             }
         }
 
-        private unsafe void writeFullFrameToArray(ushort* ProcessData, Point location)
+        private unsafe void writeFullFrameToArray(ushort* ProcessData)
         {
             FrameSizePoint.X = depthFrameDescription.Width;
             FrameSizePoint.Y = depthFrameDescription.Height;
@@ -233,15 +233,15 @@ namespace Microsoft.Samples.Kinect.InfraredBasics
                     index_value++;
                 }
             }
-            centerDepthArray[writeDownedCounter] = shiburinkawaiiyoo(ProcessData, location.X, location.Y);
 
             
 
         }
-        private void writeFullFrameToFile(byte[] buffer)
+        private void writeColorFrameToFile(byte[] buffer)
         {
             int Height = 1920;
             int Width = 1080;
+
 
             for (int i = 0; i < buffer.Length; i++)
             {

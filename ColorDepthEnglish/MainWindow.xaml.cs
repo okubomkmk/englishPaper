@@ -76,7 +76,7 @@ namespace Microsoft.Samples.Kinect.InfraredBasics
         private bool WritingFlag = false;
         private bool ArrayResized = false;
         private bool FileNameStableFlag = false;
-        private bool colorArrayIsResized = false;
+        private bool colorFrameStreamWriterIsSet = false;
         private int WaitForStartingRecord = 1;
         private ushort[] measureDepthArray = new ushort[1];
         private ushort[] centerDepthArray = new ushort[1];
@@ -161,11 +161,9 @@ namespace Microsoft.Samples.Kinect.InfraredBasics
             this.Picture.Source = depthBitmap;
 
             Array.Resize(ref DepthGlobalArray, this.depthFrameDescription.Width * this.depthFrameDescription.Height);
-            fileName = System.IO.Path.Combine(@"V:\EnglishPaperPresentation\", "Color" + "Measure" + this.FileNameTextbox.GetLineText(0) + ".dat");
-
-            writingColor = new System.IO.StreamWriter(fileName, false, System.Text.Encoding.GetEncoding("shift_jis"));
             
-
+            
+            
         }
         /*
                 private void RecordInitializer()
@@ -199,12 +197,20 @@ namespace Microsoft.Samples.Kinect.InfraredBasics
             int HorizontalError = 0;
             int VerticalError = 0;
             Point roop = new Point();
+            if (!colorFrameStreamWriterIsSet)
+            {
+                fileName = System.IO.Path.Combine(@"V:\EnglishPaperPresentation\", "Color" + "Measure" + this.FileNameTextbox.GetLineText(0) + ".dat");
+                writingColor = new System.IO.StreamWriter(fileName, false, System.Text.Encoding.GetEncoding("shift_jis"));
+                colorFrameStreamWriterIsSet = true;
+
+            }
+
             if (cursol_locked)
             {
                 if (WritingFlag)
                 {
-                    
-                    writeFullFrameToFile(colorBufferArray);
+                    writeFullFrameToArray(ProcessData);
+                    writeColorFrameToFile(colorBufferArray);
                     Array.Clear(colorBufferArray, 0,colorBufferArray.Length - 1);
                     writeDownedCounter++;
                     if (writeDownedCounter == RECORD_SIZE)
@@ -508,81 +514,7 @@ namespace Microsoft.Samples.Kinect.InfraredBasics
         */
 
 
-        private string makeTimestampFilename(DateTime printTime)
-        {
-            string mikachan = printTime.ToString().Replace(@"/", "");
-            mikachan = mikachan.Replace(@":", "");
-            mikachan = mikachan.Replace(" ", "");
-            return mikachan;
-        }
-
-        private void ChangeData_Click(object sender, RoutedEventArgs e)
-        {
-            if (mapIsIR)
-            {
-                this.ChangeData.Content = "ToColor";
-                this.Picture.Source = depthBitmap;
-            }
-            else
-            {
-                this.ChangeData.Content = "ToDepth";
-                this.Picture.Source = colorBitmap;
-            }
-            mapIsIR = !mapIsIR;
-        }
-
-        private void CheckFileNameStable_Checked(object sender, RoutedEventArgs e)
-        {
-            FileNameStableFlag = true;
-            IsTimestampNeeded = false;
-            this.CheckNonTimeStamp.IsEnabled = false;
-        }
-
-        private void CheckFileNameStable_Unchecked(object sender, RoutedEventArgs e)
-        {
-            FileNameStableFlag = false;
-            IsTimestampNeeded = true;
-            this.CheckNonTimeStamp.IsEnabled = true;
-        }
-
-        private void Picture_MouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
-        {
-            if (!WritingFlag)
-            {
-                this.textXlock.Text = e.GetPosition(Picture).X.ToString();
-                this.textYlock.Text = e.GetPosition(Picture).Y.ToString();
-            }
-
-
-        }
-
-        private void ButtonXup_Click(object sender, RoutedEventArgs e)
-        {
-            Point pointNow = getLockPosition();
-            pointNow.X++;
-            this.textXlock.Text = pointNow.X.ToString();
-
-        }
-
-        private void ButtonXdown_Click(object sender, RoutedEventArgs e)
-        {
-            Point pointNow = getLockPosition();
-            pointNow.X--;
-            this.textXlock.Text = pointNow.X.ToString();
-        }
-
-        private void ButtonYup_Click(object sender, RoutedEventArgs e)
-        {
-            Point pointNow = getLockPosition();
-            pointNow.Y++;
-            this.textYlock.Text = pointNow.Y.ToString();
-        }
-
-        private void ButtonYdown_Click(object sender, RoutedEventArgs e)
-        {
-            Point pointNow = getLockPosition();
-            pointNow.Y--;
-            this.textYlock.Text = pointNow.Y.ToString();
-        }
+        
+        
     }
 }
