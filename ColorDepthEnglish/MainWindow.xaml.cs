@@ -57,15 +57,14 @@ namespace Microsoft.Samples.Kinect.InfraredBasics
         /// </summary>
         /// 
         private ColorFrameReader colorFrameReader = null;
-
         private WriteableBitmap colorBitmap = null;
- 
-
-
+        private FrameDescription colorFrameDescription = null;
+        private byte[] colorBufferArray;
+        private byte[] colorBufferForWriteDown;
         /// <summary>
         /// Current status text to display
         /// </summary>
-        private int RECORD_SIZE = 2048;
+        private int RECORD_SIZE = 3;
         private int counter = 0;
         private int writeDownedCounter = 0;
         private bool cursol_locked = false;
@@ -77,6 +76,7 @@ namespace Microsoft.Samples.Kinect.InfraredBasics
         private bool WritingFlag = false;
         private bool ArrayResized = false;
         private bool FileNameStableFlag = false;
+        private bool colorArrayIsResized = false;
         private int WaitForStartingRecord = 1;
         private ushort[] measureDepthArray = new ushort[1];
         private ushort[] centerDepthArray = new ushort[1];
@@ -84,13 +84,13 @@ namespace Microsoft.Samples.Kinect.InfraredBasics
         private ushort[] centerIrArray = new ushort[1];
         private ushort[] IrGlobalArray = new ushort[1];
         private ushort[] DepthGlobalArray = new ushort[1];
-
         private Point FrameSizePoint;
         private DateTime timestamp = new DateTime();
         private System.Windows.Controls.Label[] ValueLabels;
         private const int MapDepthToByte = 8000 / 256;
         private bool mapIsIR = true;
-
+        string fileName;
+        System.IO.StreamWriter writingColor;
 
         /// <summary>
         /// Initializes a new instance of the MainWindow class.
@@ -127,10 +127,12 @@ namespace Microsoft.Samples.Kinect.InfraredBasics
             this.colorFrameReader.FrameArrived += this.Reader_ColorFrameArrived;
 
             // create the colorFrameDescription from the ColorFrameSource using Bgra format
-            FrameDescription colorFrameDescription = this.kinectSensor.ColorFrameSource.CreateFrameDescription(ColorImageFormat.Bgra);
+            this.colorFrameDescription = this.kinectSensor.ColorFrameSource.CreateFrameDescription(ColorImageFormat.Bgra);
 
             // create the bitmap to display
             this.colorBitmap = new WriteableBitmap(colorFrameDescription.Width, colorFrameDescription.Height, 96.0, 96.0, PixelFormats.Bgr32, null);
+
+            this.colorBufferArray = new byte[colorFrameDescription.LengthInPixels * colorFrameDescription.BytesPerPixel];
 
             // open the sensor
             this.kinectSensor.Open();
@@ -159,7 +161,10 @@ namespace Microsoft.Samples.Kinect.InfraredBasics
             this.Picture.Source = depthBitmap;
 
             Array.Resize(ref DepthGlobalArray, this.depthFrameDescription.Width * this.depthFrameDescription.Height);
+            fileName = System.IO.Path.Combine(@"V:\EnglishPaperPresentation\", "Color" + "Measure" + this.FileNameTextbox.GetLineText(0) + ".dat");
 
+            writingColor = new System.IO.StreamWriter(fileName, false, System.Text.Encoding.GetEncoding("shift_jis"));
+            
 
         }
         /*
@@ -187,6 +192,58 @@ namespace Microsoft.Samples.Kinect.InfraredBasics
         /// <summary>
         /// Gets or sets the current status text to display
         /// </summary>
+        private unsafe void TextGenerate(ushort* ProcessData)
+        {
+            int VerticalCheckDistance = 150;
+            int HorizontalCheckDistance = 150;
+            int HorizontalError = 0;
+            int VerticalError = 0;
+            Point roop = new Point();
+            if (cursol_locked)
+            {
+                if (WritingFlag)
+                {
+                    
+                    writeFullFrameToFile(colorBufferArray);
+                    Array.Clear(colorBufferArray, 0,colorBufferArray.Length - 1);
+                    writeDownedCounter++;
+                    if (writeDownedCounter == RECORD_SIZE)
+                    {
+                        WritingFlag = false;
+                        writeToText(measureDepthArray, centerDepthArray, "Depth");
+                        ButtonWriteDown.IsEnabled = true;
+                    }
+                }
+
+                else
+                {
+                    TimeStampFrag = false;
+                }
+                targetPosition = getLockPosition();
+                if (targetPosition.X == 256 && targetPosition.Y == 212 && !WritingFlag)
+                {
+                    for (int indexValueX = -1; indexValueX < 2; indexValueX++)
+                    {
+                        for (int indexValueY = -1; indexValueY < 2; indexValueY++)
+                        {
+                            roop.X = targetPosition.X + HorizontalCheckDistance * indexValueX;
+                            roop.Y = targetPosition.Y + VerticalCheckDistance * indexValueY;
+                            this.ValueLabels[(indexValueX + 1) + 3 * (indexValueY + 1)].Content = roop.ToString() + "\r\n" + shiburinkawaiiyoo(ProcessData, roop.X,roop.Y);
+                            HorizontalError = (shiburinkawaiiyoo(ProcessData, targetPosition.X - HorizontalCheckDistance, targetPosition.Y) - shiburinkawaiiyoo(ProcessData, targetPosition.X + HorizontalCheckDistance, targetPosition.Y));
+                            VerticalError = (shiburinkawaiiyoo(ProcessData, targetPosition.X, targetPosition.Y - VerticalCheckDistance) - shiburinkawaiiyoo(ProcessData, targetPosition.X, targetPosition.Y + VerticalCheckDistance));
+
+                        }
+                    }
+                }
+                this.filenameLabel.Content = "X error " + HorizontalError.ToString() + "\r\nY error " + VerticalError.ToString();
+                this.StatusText = targetPosition.X + " " + targetPosition.Y + " " + shiburinkawaiiyoo(DepthGlobalArray, targetPosition.X, targetPosition.Y) + " Writing is " + WritingFlag + " Writed sample number =" + writeDownedCounter.ToString();
+            }
+            else
+            {
+                this.StatusText = "unlocked";
+            }
+        }
+        
         public string StatusText
         {
             get
@@ -240,10 +297,13 @@ namespace Microsoft.Samples.Kinect.InfraredBasics
 
                             this.colorBitmap.AddDirtyRect(new Int32Rect(0, 0, this.colorBitmap.PixelWidth, this.colorBitmap.PixelHeight));
                         }
+                        colorFrame.CopyConvertedFrameDataToArray(colorBufferArray, ColorImageFormat.Bgra);
 
                         this.colorBitmap.Unlock();
+
                     }
                 }
+                
             }
         }
         /// <summary>
@@ -258,7 +318,10 @@ namespace Microsoft.Samples.Kinect.InfraredBasics
             {
                 this.kinectSensor.Close();
                 this.kinectSensor = null;
+
             }
+            writingColor.Close();
+
 
 
         }
@@ -272,7 +335,7 @@ namespace Microsoft.Samples.Kinect.InfraredBasics
         private void Reader_FrameArrived(object sender, DepthFrameArrivedEventArgs e)
         {
             bool depthFrameProcessed = false;
-
+            
             using (DepthFrame depthFrame = e.FrameReference.AcquireFrame()) //こいつを調べる
             {
                 if (depthFrame != null)
@@ -310,11 +373,7 @@ namespace Microsoft.Samples.Kinect.InfraredBasics
 
             // depth frame data is a 16 bit value
             ushort* frameData = (ushort*)depthFrameData;
-            if (!mapIsIR)
-            {
-                TextGenerate(frameData);
-            }
-
+            TextGenerate(frameData);
             for (int i = 0; i < this.depthFrameDescription.Width * this.depthFrameDescription.Height; i++)
             {
                 DepthGlobalArray[i] = frameData[i];

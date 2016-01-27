@@ -21,48 +21,7 @@ namespace Microsoft.Samples.Kinect.InfraredBasics
 {
     public partial class MainWindow : Window, INotifyPropertyChanged
     {
-        private unsafe void TextGenerate(ushort* ProcessData)
-        {
-            int VerticalCheckDistance = 150;
-            int HorizontalCheckDistance = 150;
-            int HorizontalError = 0;
-            int VerticalError = 0;
-            Point roop = new Point();
-            if (cursol_locked)
-            {
-                if (WritingFlag)
-                {
-                    writeToArrayPoint(ProcessData, getLockPosition());
-                }
-
-                else
-                {
-                    TimeStampFrag = false;
-                }
-                targetPosition = getLockPosition();
-                if (targetPosition.X == 256 && targetPosition.Y == 212 && !WritingFlag)
-                {
-                    for (int indexValueX = -1; indexValueX < 2; indexValueX++)
-                    {
-                        for (int indexValueY = -1; indexValueY < 2; indexValueY++)
-                        {
-                            roop.X = targetPosition.X + HorizontalCheckDistance * indexValueX;
-                            roop.Y = targetPosition.Y + VerticalCheckDistance * indexValueY;
-                            this.ValueLabels[(indexValueX + 1) + 3 * (indexValueY + 1)].Content = roop.ToString() + "\r\n" + shiburinkawaiiyoo(ProcessData, roop);
-                            HorizontalError = (shiburinkawaiiyoo(ProcessData, targetPosition.X - HorizontalCheckDistance, targetPosition.Y) - shiburinkawaiiyoo(ProcessData, targetPosition.X + HorizontalCheckDistance, targetPosition.Y));
-                            VerticalError = (shiburinkawaiiyoo(ProcessData, targetPosition.X, targetPosition.Y - VerticalCheckDistance) - shiburinkawaiiyoo(ProcessData, targetPosition.X, targetPosition.Y + VerticalCheckDistance));
-
-                        }
-                    }
-                }
-                this.filenameLabel.Content = "X error " + HorizontalError.ToString() + "\r\nY error " + VerticalError.ToString();
-                this.StatusText = targetPosition.X + " " + targetPosition.Y + " " + shiburinkawaiiyoo(ProcessData, targetPosition.X, targetPosition.Y) + " Writing is " + WritingFlag + " Writed sample number =" + writeDownedCounter.ToString();
-            }
-            else
-            {
-                this.StatusText = "unlocked";
-            }
-        }
+       
 
         private unsafe ushort shiburinkawaiiyoo(ushort* ProcessData, double X, double Y)
         {
@@ -83,10 +42,10 @@ namespace Microsoft.Samples.Kinect.InfraredBasics
         {
 
             string StartedTime = makeTimestampFilename(timestamp);
-            string filenamePartialIR = FileNameStableFlag ? System.IO.Path.Combine(@"V:\Eng\FrameData\", type + "Measure" + this.FileNameTextbox.GetLineText(0) + ".dat") : System.IO.Path.Combine(@"V:\KinectIR\capturedData\", StartedTime + type + ".dat");
+            string filenamePartialIR = FileNameStableFlag ? System.IO.Path.Combine(@"V:\EnglishPaperPresentation\", type + "Measure" + this.FileNameTextbox.GetLineText(0) + ".dat") : System.IO.Path.Combine(@"V:\KinectIR\capturedData\", StartedTime + type + ".dat");
             this.filenameLabel.Content = filenamePartialIR;
-            string filenameCenterIR = FileNameStableFlag ? System.IO.Path.Combine(@"V:\Eng\FrameData\", type + "Center" + this.FileNameTextbox.GetLineText(0) + ".dat") : System.IO.Path.Combine(@"V:\KinectIR\capturedData\", StartedTime + "IRcenter.dat");
-            string framesizedataFile = System.IO.Path.Combine(@"V:\Eng\FrameData\", "sizeofframe" + this.FileNameTextbox.GetLineText(0) + ".dat");
+            string filenameCenterIR = FileNameStableFlag ? System.IO.Path.Combine(@"V:\EnglishPaperPresentation\", type + "Center" + this.FileNameTextbox.GetLineText(0) + ".dat") : System.IO.Path.Combine(@"V:\KinectIR\capturedData\", StartedTime + "IRcenter.dat");
+            string framesizedataFile = System.IO.Path.Combine(@"V:\EnglishPaperPresentation\", "sizeofframe" + this.FileNameTextbox.GetLineText(0) + ".dat");
 
             System.IO.StreamWriter writingSwIR = new System.IO.StreamWriter(filenamePartialIR, false, System.Text.Encoding.GetEncoding("shift_jis"));
             System.IO.StreamWriter writingCenterIR = new System.IO.StreamWriter(filenameCenterIR, false, System.Text.Encoding.GetEncoding("shift_jis"));
@@ -122,6 +81,15 @@ namespace Microsoft.Samples.Kinect.InfraredBasics
             FramesizeData.Write(FrameSizePoint.X + "\r\n" + FrameSizePoint.Y + "\r\n" + RECORD_SIZE + "\r\n");
             FramesizeData.Close();
 
+
+        }
+
+        private unsafe void writeToTextColor(byte[] buffer, int length)
+        {
+            for (int i = 0; i < length; i++)
+            {
+                writingColor.Write(buffer[i].ToString() + "\r\n");
+            }
 
         }
         private Point getLockPosition()
@@ -205,7 +173,7 @@ namespace Microsoft.Samples.Kinect.InfraredBasics
 
         private unsafe void writeToArrayPoint(ushort* ProcessData, Point location)
         {
-            int leftX = 239, leftY = 202, rightX = 250, rightY = 210;
+            int leftX = 0, leftY = 0, rightX = depthFrameDescription.Width - 1, rightY = depthFrameDescription.Height - 1;
 
             Point R1 = new Point(leftX, leftY);
             Point R2 = new Point(rightX, rightY);
@@ -228,24 +196,59 @@ namespace Microsoft.Samples.Kinect.InfraredBasics
                 for (int i = (int)R1.X; i <= R2.X; i++)
                 {
                     measureDepthArray[writeDownedCounter * Framesize + index_value] = shiburinkawaiiyoo(DepthGlobalArray, i, j);
-                    measureIrArray[writeDownedCounter * Framesize + index_value] = shiburinkawaiiyoo(IrGlobalArray, i, j);
                     index_value++;
                 }
             }
             centerDepthArray[writeDownedCounter] = shiburinkawaiiyoo(DepthGlobalArray, location.X, location.Y);
-            centerIrArray[writeDownedCounter] = shiburinkawaiiyoo(IrGlobalArray, location.X, location.Y);
 
             writeDownedCounter++;
             if (writeDownedCounter == centerDepthArray.Length)
             {
                 WritingFlag = false;
                 writeToText(measureDepthArray, centerDepthArray, "Depth");
-                writeToText(measureIrArray, centerIrArray, "Infrared");
                 ButtonWriteDown.IsEnabled = true;
             }
+        }
 
+        private unsafe void writeFullFrameToArray(ushort* ProcessData, Point location)
+        {
+            FrameSizePoint.X = depthFrameDescription.Width;
+            FrameSizePoint.Y = depthFrameDescription.Height;
+            if (!ArrayResized)
+            {
+                Array.Resize(ref measureDepthArray, RECORD_SIZE * (int)(FrameSizePoint.X * FrameSizePoint.Y));
+                Array.Resize(ref centerDepthArray, RECORD_SIZE);
 
+            }
 
+            ArrayResized = true;
+            int Framesize = (int)(FrameSizePoint.X * FrameSizePoint.Y);
+            
+            int index_value = 0;
+            for (int j = 0; j < depthFrameDescription.Height ; j++)
+            {
+                for (int i = 0;i < depthFrameDescription.Width ; i++)
+                {
+                    measureDepthArray[writeDownedCounter * Framesize + index_value] = shiburinkawaiiyoo(ProcessData, i, j);
+                    index_value++;
+                }
+            }
+            centerDepthArray[writeDownedCounter] = shiburinkawaiiyoo(ProcessData, location.X, location.Y);
+
+            
+
+        }
+        private void writeFullFrameToFile(byte[] buffer)
+        {
+            int Height = 1920;
+            int Width = 1080;
+
+            for (int i = 0; i < buffer.Length; i++)
+            {
+                writingColor.Write(buffer[i].ToString() + "\r\n");
+            }
+
+            
         }
 
     }
