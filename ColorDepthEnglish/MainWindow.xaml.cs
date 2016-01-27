@@ -29,9 +29,7 @@ namespace Microsoft.Samples.Kinect.InfraredBasics
         
         private KinectSensor kinectSensor = null;
 
-        
-        private DepthFrameReader depthFrameReader = null;
-
+       
         /// <summary> merge sareru?s
         /// Description of the data contained in the depth frame
         /// </summary>
@@ -56,7 +54,6 @@ namespace Microsoft.Samples.Kinect.InfraredBasics
         /// Initializes a new instance of the MainWindow class.
         /// </summary>
         /// 
-        private ColorFrameReader colorFrameReader = null;
         private WriteableBitmap colorBitmap = null;
         private FrameDescription colorFrameDescription = null;
         private byte[] colorBufferArray;
@@ -95,21 +92,21 @@ namespace Microsoft.Samples.Kinect.InfraredBasics
         /// <summary>
         /// Initializes a new instance of the MainWindow class.
         /// </summary>
+        /// 
+        private MultiSourceFrameReader multiReader = null;
         public MainWindow()
         {
             // get the kinectSensor object
             this.kinectSensor = KinectSensor.GetDefault();
-            
+
+            this.multiReader = kinectSensor.OpenMultiSourceFrameReader(FrameSourceTypes.Color | FrameSourceTypes.Depth);
+            this.multiReader.MultiSourceFrameArrived += multiReader_MultiSourceFrameArrived;
 
             // set IsAvailableChanged event notifier
             this.kinectSensor.IsAvailableChanged += this.Sensor_IsAvailableChanged;
 
             this.DataContext = this;
 
-            this.depthFrameReader = this.kinectSensor.DepthFrameSource.OpenReader();
-
-            // wire handler for frame arrival
-            this.depthFrameReader.FrameArrived += this.Reader_FrameArrived;
 
             // get FrameDescription from DepthFrameSource
             this.depthFrameDescription = this.kinectSensor.DepthFrameSource.FrameDescription;
@@ -119,12 +116,6 @@ namespace Microsoft.Samples.Kinect.InfraredBasics
 
             // create the bitmap to display
             this.depthBitmap = new WriteableBitmap(this.depthFrameDescription.Width, this.depthFrameDescription.Height, 96.0, 96.0, PixelFormats.Gray8, null);
-
-            // open the reader for the color frames
-            this.colorFrameReader = this.kinectSensor.ColorFrameSource.OpenReader();
-
-            // wire handler for frame arrival
-            this.colorFrameReader.FrameArrived += this.Reader_ColorFrameArrived;
 
             // create the colorFrameDescription from the ColorFrameSource using Bgra format
             this.colorFrameDescription = this.kinectSensor.ColorFrameSource.CreateFrameDescription(ColorImageFormat.Bgra);
@@ -185,7 +176,22 @@ namespace Microsoft.Samples.Kinect.InfraredBasics
         /// <summary>
         /// Gets the bitmap to display
         /// </summary>
+        public void multiReader_MultiSourceFrameArrived(object sender, MultiSourceFrameArrivedEventArgs e)
+        {
+            var multiFrame = e.FrameReference.AcquireFrame();
+            
+            if (multiFrame == null)
+            {
+                return;
+            }
+            else
+            {
+                UpdateColorFrame(multiFrame);
+                UpdateDepthFrame(multiFrame);
+            }
 
+
+        }
 
         /// <summary>
         /// Gets or sets the current status text to display
@@ -280,37 +286,38 @@ namespace Microsoft.Samples.Kinect.InfraredBasics
             }
         }
 
-        private void Reader_ColorFrameArrived(object sender, ColorFrameArrivedEventArgs e)
+        private void UpdateColorFrame(MultiSourceFrame multiFrame)
         {
             // ColorFrame is IDisposable
-            using (ColorFrame colorFrame = e.FrameReference.AcquireFrame())
+            ColorFrame colorFrame = multiFrame.ColorFrameReference.AcquireFrame();
+            
+            if (colorFrame != null)
             {
-                if (colorFrame != null)
+                FrameDescription colorFrameDescription = colorFrame.FrameDescription;
+
+                using (KinectBuffer colorBuffer = colorFrame.LockRawImageBuffer())
                 {
-                    FrameDescription colorFrameDescription = colorFrame.FrameDescription;
+                    this.colorBitmap.Lock();
 
-                    using (KinectBuffer colorBuffer = colorFrame.LockRawImageBuffer())
+                    // verify data and write the new color frame data to the display bitmap
+                    if ((colorFrameDescription.Width == this.colorBitmap.PixelWidth) && (colorFrameDescription.Height == this.colorBitmap.PixelHeight))
                     {
-                        this.colorBitmap.Lock();
+                        colorFrame.CopyConvertedFrameDataToIntPtr(
+                            this.colorBitmap.BackBuffer,
+                            (uint)(colorFrameDescription.Width * colorFrameDescription.Height * 4),
+                            ColorImageFormat.Bgra);
 
-                        // verify data and write the new color frame data to the display bitmap
-                        if ((colorFrameDescription.Width == this.colorBitmap.PixelWidth) && (colorFrameDescription.Height == this.colorBitmap.PixelHeight))
-                        {
-                            colorFrame.CopyConvertedFrameDataToIntPtr(
-                                this.colorBitmap.BackBuffer,
-                                (uint)(colorFrameDescription.Width * colorFrameDescription.Height * 4),
-                                ColorImageFormat.Bgra);
-
-                            this.colorBitmap.AddDirtyRect(new Int32Rect(0, 0, this.colorBitmap.PixelWidth, this.colorBitmap.PixelHeight));
-                        }
-                        colorFrame.CopyConvertedFrameDataToArray(colorBufferArray, ColorImageFormat.Bgra);
-
-                        this.colorBitmap.Unlock();
-
+                        this.colorBitmap.AddDirtyRect(new Int32Rect(0, 0, this.colorBitmap.PixelWidth, this.colorBitmap.PixelHeight));
                     }
+                    colorFrame.CopyConvertedFrameDataToArray(colorBufferArray, ColorImageFormat.Bgra);
+
+                    this.colorBitmap.Unlock();
+
+
                 }
-                
             }
+                
+            
         }
         /// <summary>
         /// Execute shutdown tasks
@@ -338,34 +345,33 @@ namespace Microsoft.Samples.Kinect.InfraredBasics
         /// <param name="sender">object sending the event</param>
         /// <param name="e">event arguments</param>
 
-        private void Reader_FrameArrived(object sender, DepthFrameArrivedEventArgs e)
+        private void UpdateDepthFrame(MultiSourceFrame multiFrame)
         {
             bool depthFrameProcessed = false;
+            DepthFrame depthFrame = multiFrame.DepthFrameReference.AcquireFrame();
             
-            using (DepthFrame depthFrame = e.FrameReference.AcquireFrame()) //こいつを調べる
+            if (depthFrame != null)
             {
-                if (depthFrame != null)
+                // the fastest way to process the body index data is to directly access 
+                // the underlying buffer
+                using (Microsoft.Kinect.KinectBuffer depthBuffer = depthFrame.LockImageBuffer())
                 {
-                    // the fastest way to process the body index data is to directly access 
-                    // the underlying buffer
-                    using (Microsoft.Kinect.KinectBuffer depthBuffer = depthFrame.LockImageBuffer())
+                    // verify data and write the color data to the display bitmap
+                    if (((this.depthFrameDescription.Width * this.depthFrameDescription.Height) == (depthBuffer.Size / this.depthFrameDescription.BytesPerPixel)) &&
+                        (this.depthFrameDescription.Width == this.depthBitmap.PixelWidth) && (this.depthFrameDescription.Height == this.depthBitmap.PixelHeight))
                     {
-                        // verify data and write the color data to the display bitmap
-                        if (((this.depthFrameDescription.Width * this.depthFrameDescription.Height) == (depthBuffer.Size / this.depthFrameDescription.BytesPerPixel)) &&
-                            (this.depthFrameDescription.Width == this.depthBitmap.PixelWidth) && (this.depthFrameDescription.Height == this.depthBitmap.PixelHeight))
-                        {
-                            // Note: In order to see the full range of depth (including the less reliable far field depth)
-                            // we are setting maxDepth to the extreme potential depth threshold
-                            ushort maxDepth = ushort.MaxValue; // ushort.MaxValue is 65535
+                        // Note: In order to see the full range of depth (including the less reliable far field depth)
+                        // we are setting maxDepth to the extreme potential depth threshold
+                        ushort maxDepth = ushort.MaxValue; // ushort.MaxValue is 65535
 
-                            // If you wish to filter by reliable depth distance, uncomment the following line:
-                            //// maxDepth = depthFrame.DepthMaxReliableDistance
+                        // If you wish to filter by reliable depth distance, uncomment the following line:
+                        //// maxDepth = depthFrame.DepthMaxReliableDistance
 
-                            this.ProcessDepthFrameData(depthBuffer.UnderlyingBuffer, depthBuffer.Size, depthFrame.DepthMinReliableDistance, maxDepth);
-                            depthFrameProcessed = true;
-                        }
+                        this.ProcessDepthFrameData(depthBuffer.UnderlyingBuffer, depthBuffer.Size, depthFrame.DepthMinReliableDistance, maxDepth);
+                        depthFrameProcessed = true;
                     }
                 }
+                
             }
 
             if (depthFrameProcessed)
@@ -379,7 +385,6 @@ namespace Microsoft.Samples.Kinect.InfraredBasics
 
             // depth frame data is a 16 bit value
             ushort* frameData = (ushort*)depthFrameData;
-            TextGenerate(frameData);
             for (int i = 0; i < this.depthFrameDescription.Width * this.depthFrameDescription.Height; i++)
             {
                 DepthGlobalArray[i] = frameData[i];
@@ -395,6 +400,8 @@ namespace Microsoft.Samples.Kinect.InfraredBasics
                 // Values outside the reliable depth range are mapped to 0 (black).
                 this.depthPixels[i] = (byte)(depth >= minDepth && depth <= maxDepth ? (depth / MapDepthToByte) : 0);
             }
+            TextGenerate(frameData);
+            
         }
 
         /// <summary>
@@ -422,62 +429,7 @@ namespace Microsoft.Samples.Kinect.InfraredBasics
         /// </summary>
         /// <param name="sender">object sending the event</param>
         /// <param name="e">event arguments</param>
-        private void Sensor_IsAvailableChanged(object sender, IsAvailableChangedEventArgs e)
-        {
-            // set the status text
-            //this.StatusText = this.kinectSensor.IsAvailable ? Properties.Resources.RunningStatusText
-                                                            //: Properties.Resources.SensorNotAvailableStatusText;
-        }
-
-
-        private void CheckNonTimeStamp_Checked(object sender, RoutedEventArgs e)
-        {
-            IsTimestampNeeded = false;
-        }
-
-        private void CheckNonTimeStamp_Unchecked(object sender, RoutedEventArgs e)
-        {
-            IsTimestampNeeded = true;
-        }
-
-        private void ButtonWriteDown_Click(object sender, RoutedEventArgs e)
-        {
-
-            DispatcherTimer ButtonEditorTimer = new DispatcherTimer(DispatcherPriority.Normal);
-            ButtonEditorTimer.Interval = new TimeSpan(0, 0, 0, 0, 1000);
-            ButtonEditorTimer.Tick += new EventHandler(ButtonEdit);
-            ButtonEditorTimer.Start();
-            writeDownedCounter = 0;
-            ButtonWriteDown.IsEnabled = false;
-            textXlock.IsEnabled = false;
-            textYlock.IsEnabled = false;
-            timestamp = DateTime.Now;  //timestamp is the time when the record is started
-
-
-        }
-
-        private void ButtonEdit(object sender, EventArgs e)
-        {
-
-            this.ButtonWriteDown.Content = (WaitForStartingRecord).ToString();
-            WaitForStartingRecord--;
-            if (WaitForStartingRecord == -1)
-            {
-                WritingFlag = true;
-            }
-        }
-
-        private void CheckLockCenter_Checked(object sender, RoutedEventArgs e)
-        {
-            cursol_locked = true;
-            this.ButtonWriteDown.IsEnabled = true;
-        }
-
-        private void CheckLockCenter_Unchecked(object sender, RoutedEventArgs e)
-        {
-            cursol_locked = false;
-            this.ButtonWriteDown.IsEnabled = false;
-        }
+        
         /*
         private unsafe void writeToArrayHorizontalPixels(ushort* ProcessData, Point location)
         {

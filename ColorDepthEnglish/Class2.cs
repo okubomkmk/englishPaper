@@ -95,5 +95,61 @@ namespace Microsoft.Samples.Kinect.InfraredBasics
             pointNow.Y--;
             this.textYlock.Text = pointNow.Y.ToString();
         }
+        private void Sensor_IsAvailableChanged(object sender, IsAvailableChangedEventArgs e)
+        {
+            // set the status text
+            //this.StatusText = this.kinectSensor.IsAvailable ? Properties.Resources.RunningStatusText
+            //: Properties.Resources.SensorNotAvailableStatusText;
+        }
+
+
+        private void CheckNonTimeStamp_Checked(object sender, RoutedEventArgs e)
+        {
+            IsTimestampNeeded = false;
+        }
+
+        private void CheckNonTimeStamp_Unchecked(object sender, RoutedEventArgs e)
+        {
+            IsTimestampNeeded = true;
+        }
+
+        private void ButtonWriteDown_Click(object sender, RoutedEventArgs e)
+        {
+
+            DispatcherTimer ButtonEditorTimer = new DispatcherTimer(DispatcherPriority.Normal);
+            ButtonEditorTimer.Interval = new TimeSpan(0, 0, 0, 0, 1000);
+            ButtonEditorTimer.Tick += new EventHandler(ButtonEdit);
+            ButtonEditorTimer.Start();
+            writeDownedCounter = 0;
+            ButtonWriteDown.IsEnabled = false;
+            textXlock.IsEnabled = false;
+            textYlock.IsEnabled = false;
+            timestamp = DateTime.Now;  //timestamp is the time when the record is started
+
+
+        }
+
+        private void ButtonEdit(object sender, EventArgs e)
+        {
+
+            this.ButtonWriteDown.Content = (WaitForStartingRecord).ToString();
+            WaitForStartingRecord--;
+            if (WaitForStartingRecord == -1)
+            {
+                WritingFlag = true;
+            }
+        }
+
+        private void CheckLockCenter_Checked(object sender, RoutedEventArgs e)
+        {
+            cursol_locked = true;
+            this.ButtonWriteDown.IsEnabled = true;
+        }
+
+        private void CheckLockCenter_Unchecked(object sender, RoutedEventArgs e)
+        {
+            cursol_locked = false;
+            this.ButtonWriteDown.IsEnabled = false;
+        }
     }
 }
